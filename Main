@@ -1,0 +1,59 @@
+import pandas as pd
+import numpy as np
+import re
+import os 
+import functools
+
+df=pd.read_csv(r'C:\Users\YOURNAME\Documents\YOUR PACE ANALYTICS DATA.csv',header=None)
+#import lab data
+#csv file prepared in tabula-make sure to only include pages starting with full analytical data
+df_cols=['Identity','Value','Units','LOQ','LOD','DateP','DateA','Matrix','CAS','QUAL'] 
+df.columns=df_cols
+df.head(46)
+#relabeling the lab data to have accurate headers 
+
+df['Value']=df['Value'].str.replace('<','')
+#stripping out extra items from lab data
+df['Value']=df['Value'].str.replace('>','')
+df['Value']=df['Value'].str.replace('J','')
+df['Value'] = pd.to_numeric(df['Value'],errors='coerce')
+
+df.loc[df['Units'] == 'ug/kg', 'Value'] = df['Value'].div(1000)
+df.loc[df['Units'] == '%', 'Value'] = df['Value'].div(0.001)
+#converting ug/kg to mg/kg by locating and dividing by 1000 for lab data
+#converting % to mg/kg by locating and multiplying by 1000 for lab data
+
+import requests
+dls = "https://dnr.wisconsin.gov/sites/default/files/topic/Brownfields/tech/RCLsNoMacro.xls"
+resp = requests.get(dls)
+
+output = open('test.xlsm', 'wb')
+output.write(resp.content)
+output.close()
+#importing the Government WDNR RCL file 
+
+rcl=pd.read_excel("test.xlsm",sheet_name='Non-Industrial_DC_RCLs')
+#reading the government file. Sheet is non-industrial_DC_RCL File
+#can change this to whichever tab is suitable
+
+rcl_cols_NIContact=['Contaminant','CAS','NC_RCL','C_RCL','Not_to_exceed','Basis','Background','Input','Blank1','Blank2','Blank3','Blank4','Blank5'] 
+rcl.columns=rcl_cols_NIContact
+#Relabeling government data
+
+s=list(df['LOQ'].index[df['LOQ'] == 'Collected:']) + [len(df)]
+# Finding row to split new dataframes in lab data
+
+samples = []
+for i, j in zip(s, s[1:]):
+     sample_df = df.iloc[i+1 : j, :].reset_index(drop=True)    
+     samples.append(sample_df)
+print(samples)
+
+wat=[]
+for sample in samples: 
+    b=pd.merge(rcl, sample, how='left',on='CAS')
+    wat.append(b)
+    
+final=pd.concat(wat, join="outer",axis=1)
+
+final.to_csv('Data_Analysis.csv', index=False)
